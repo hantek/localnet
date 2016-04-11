@@ -1,0 +1,3 @@
+penalize gradients on non-selected regions;
+add regularizations within a feature map's weights
+

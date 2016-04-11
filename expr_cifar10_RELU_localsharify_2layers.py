@@ -86,6 +86,8 @@ model = ReluAutoencoder(
         borrow=True
     ),
     vistype='real', tie=True, npy_rng=npy_rng
+)
+"""
 ) + ReluAutoencoder(
     hid_layer_sizes[0], hid_layer_sizes[1],
     init_w = theano.shared(
@@ -125,8 +127,9 @@ model = ReluAutoencoder(
         borrow=True
     ),
     vistype='real', tie=True, npy_rng=npy_rng
-)
+"""
 model.print_layer()
+
 
 # generate a fixed mask, layer 0
 print "... generating l0 mask"
@@ -134,7 +137,8 @@ mask = numpy.zeros((train_x.get_value().shape[1], hid_layer_sizes[0]),
                    dtype=theano.config.floatX)
 window_size = npy_rng.randint(layer_window_size[0][0], layer_window_size[0][1],
                               (hid_layer_sizes[0], ))
-center_list_l0 = numpy.zeros((hid_layer_sizes[0], 3), dtype=theano.config.floatX)
+center_list_l0 = numpy.zeros((hid_layer_sizes[0], 3),
+                             dtype=theano.config.floatX)
 for i, isize in enumerate(window_size):
     start_point = npy_rng.randint(0, 32 - isize, (2, ))
     stop_point = (start_point[0] + isize, start_point[1] + isize)
@@ -153,13 +157,18 @@ z_range = hid_layer_sizes[0] * 1.0 / center_list_l0[:, :2].max()**2
 center_list_l0[:, 2] *= z_range
 numpy.save(open("mask_l0.npy", 'wb'), mask)
 
+
 mask = numpy.load('mask_l0.npy')
 mask_l0_theano = theano.shared(value=mask, name='mask_l0', borrow=True)
 apply_mask_l0 = theano.function(
     inputs=[],
-    updates={model.models_stack[0].w : model.models_stack[0].w * mask_l0_theano}
+    updates={model.w : model.w * mask_l0_theano}
 )
 
+# use nearest interpolation to rescale all filters into a same resolution, and
+# then apply resharify on that.
+
+"""
 # generate the mask for layer 1, according to center_list
 # covering rate: 4*4*8000/(28*28) ~= 163,
 # this number roughly equals filter number. 
@@ -244,7 +253,7 @@ apply_mask = [apply_mask_l0, apply_mask_l1, apply_mask_l2]
 # deeper layers are fully connected. 
 
 # pdb.set_trace()
-
+"""
 print "Done."
 
 #############
@@ -305,21 +314,10 @@ print "Done."
 
 print "\n\n... building fine-tune model -- contraction 1"
 model_ft = model + LogisticRegression(
-    hid_layer_sizes[-1], 10, npy_rng=npy_rng
+    hid_layer_sizes[0], 10, npy_rng=npy_rng
 )
 model_ft.print_layer()
-"""
-train_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), train_y)),
-    givens = {model_ft.varin : train_x},
-)
-test_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), test_y)),
-    givens = {model_ft.varin : test_x},
-)
-"""
+
 # compile error rate counters:
 index = T.lscalar()
 truth = T.lvector('truth')
@@ -335,8 +333,8 @@ def train_error():
 test_set_error_rate = theano.function(
     [index],
     T.mean(T.neq(model_ft.models_stack[-1].predict(), truth)),
-    givens = {model_ft.varin : test_x[index * batchsize: (index + 1) * batchsize],
-              truth : test_y[index * batchsize: (index + 1) * batchsize]},
+    givens = {model_ft.varin : test_x[index * batchsize: (index+1) * batchsize],
+              truth : test_y[index * batchsize: (index+1) * batchsize]},
 )
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(10000/batchsize)])
@@ -394,9 +392,9 @@ hist_avg = [numpy.inf, ] * avg
 for step in xrange(finetune_epc * 50000 / batchsize):
     # learn
     cost = trainer.step_fast(verbose_stride=500)
-    apply_mask[0]()
-    apply_mask[1]()
-    apply_mask[2]()
+    apply_mask_l0()
+    #apply_mask[1]()
+    #apply_mask[2]()
 
     epc_cost += cost
     if step % (50000 / batchsize) == 0 and step > 0:
@@ -424,6 +422,6 @@ print "Done."
 print "***FINAL error rate, train: %f, test: %f" % (
     train_error(), test_error()
 )
-save_params(model, 'ZCARELUAE_local3d_ft.npy')
+save_params(model, __file__.split('.')[0] + '_params.npy')
 
 pdb.set_trace()

@@ -99,6 +99,8 @@ model = ReluAutoencoder(
         borrow=True
     ),
     vistype='real', tie=True, npy_rng=npy_rng
+)
+"""
 ) + ReluAutoencoder(
     hid_layer_sizes[1], hid_layer_sizes[2],
     init_w = theano.shared(
@@ -125,9 +127,10 @@ model = ReluAutoencoder(
         borrow=True
     ),
     vistype='real', tie=True, npy_rng=npy_rng
-)
+"""
 model.print_layer()
 
+"""
 # generate a fixed mask, layer 0
 print "... generating l0 mask"
 mask = numpy.zeros((train_x.get_value().shape[1], hid_layer_sizes[0]),
@@ -152,6 +155,7 @@ center_list_l0 -= 4
 z_range = hid_layer_sizes[0] * 1.0 / center_list_l0[:, :2].max()**2
 center_list_l0[:, 2] *= z_range
 numpy.save(open("mask_l0.npy", 'wb'), mask)
+"""
 
 mask = numpy.load('mask_l0.npy')
 mask_l0_theano = theano.shared(value=mask, name='mask_l0', borrow=True)
@@ -160,6 +164,7 @@ apply_mask_l0 = theano.function(
     updates={model.models_stack[0].w : model.models_stack[0].w * mask_l0_theano}
 )
 
+"""
 # generate the mask for layer 1, according to center_list
 # covering rate: 4*4*8000/(28*28) ~= 163,
 # this number roughly equals filter number. 
@@ -170,31 +175,28 @@ window_size = npy_rng.randint(layer_window_size[1][0], layer_window_size[1][1],
                               (hid_layer_sizes[1], ))
 center_list_l1 = numpy.zeros((hid_layer_sizes[1], 3), dtype=theano.config.floatX)
 
-i = 0
-for isize in window_size:
+for i, isize in enumerate(window_size):
     start_point = npy_rng.randint(0, 24 - isize, (2, ))
     stop_point = (start_point[0] + isize, start_point[1] + isize)
     filter_position = npy_rng.random_sample() * z_range
 
-    idx = 0
-    for cx, cy, cz in center_list_l0:
-        if (cx >= start_point[0] and cx <= stop_point[0]) \
-            and (cy >= start_point[1] and cy <= stop_point[1]) \
-            and (numpy.abs(cz - filter_position) <= 2):
+    for idx, (cx, cy, cz) in enumerate(center_list_l0):
+        if (cx >= start_point[0] and cx <= stop_point[0]) and \
+           (cy >= start_point[1] and cy <= stop_point[1]):  #  \
+            # and (numpy.abs(cz - filter_position) <= 2):
             mask[idx, i] = 1
-        idx += 1
     
     # compute for each hidden unit the center of local receptive filter
     center_list_l1[i] = (start_point[0] + isize * 1. / 2,
                          start_point[1] + isize * 1. / 2,
                          filter_position)
-    i += 1
 
 # range: [[0,12], [0,12], [0,138.888]], density: 1 neuron per volumn.
 center_list_l1 -= 6
 z_range = hid_layer_sizes[1] * 1.0 / center_list_l1[:, :2].max()**2
 center_list_l0[:, 2] *= z_range / center_list_l1[:,2].max()
 numpy.save(open("mask_l1.npy", 'wb'), mask)
+"""
 
 mask = numpy.load('mask_l1.npy')
 mask_l1_theano = theano.shared(value=mask, name='mask_l1', borrow=True)
@@ -203,6 +205,7 @@ apply_mask_l1 = theano.function(
     updates={model.models_stack[1].w : model.models_stack[1].w * mask_l1_theano}
 )
 
+"""
 # generate the mask for layer 2.
 print "... generating l2 mask"
 
@@ -239,65 +242,11 @@ apply_mask_l2 = theano.function(
     inputs=[],
     updates={model.models_stack[2].w : model.models_stack[2].w * mask_l2_theano}
 )
-
-apply_mask = [apply_mask_l0, apply_mask_l1, apply_mask_l2]
-# deeper layers are fully connected. 
-
-# pdb.set_trace()
-
-print "Done."
-
-#############
-# PRE-TRAIN #
-#############
 """
-for i in range(len(hid_layer_sizes)):
-    print "\n\nPre-training layer %d:" % i
-    trainer = GraddescentMinibatch(
-        varin=model.varin, data=train_x, 
-        cost=model.models_stack[i].cost(),
-        params=model.models_stack[i].params_private,
-        supervised=False,
-        batchsize=batchsize, learningrate=pretrain_lr, momentum=momentum,
-        rng=npy_rng
-    )
 
-    init_lr = trainer.learningrate
-    prev_cost = numpy.inf
-    epc_cost = 0.
-    patience = 0
-    avg = 50
-    crnt_avg = [numpy.inf, ] * avg
-    hist_avg = [numpy.inf, ] * avg
-    for step in xrange(pretrain_epc * 50000 / batchsize):
-        # learn
-        cost = trainer.step_fast(verbose_stride=500)
-        if i < 3:
-            apply_mask[i]()
-
-        epc_cost += cost / (50000 / batchsize)
-        if step % (50000 / batchsize) == 0 and step > 0:
-            # set stop rule
-            ind = (step / (50000 / batchsize)) % avg
-            hist_avg[ind] = crnt_avg[ind]
-            crnt_avg[ind] = epc_cost
-            if sum(hist_avg) < sum(crnt_avg):
-                break
-    
-            # adjust learning rate
-            if prev_cost <= epc_cost:
-                patience += 1
-            if patience > 10:
-                trainer.set_learningrate(0.9 * trainer.learningrate)
-                patience = 0
-            prev_cost = epc_cost
-
-            epc_cost = 0.
-
-    save_params(model, 'ZCARELUAE_50000_8000_1000_1600_1600_local_wsz6_12_4_8_3_6.npy')
-load_params(model, 'ZCARELUAE_50000_8000_1000_1600_1600_local_wsz6_12_4_8_3_6.npy')
+apply_mask = [apply_mask_l0, apply_mask_l1]  # , apply_mask_l2]
+# deeper layers are fully connected.
 print "Done."
-"""
 
 #########################
 # BUILD FINE-TUNE MODEL #
@@ -305,21 +254,10 @@ print "Done."
 
 print "\n\n... building fine-tune model -- contraction 1"
 model_ft = model + LogisticRegression(
-    hid_layer_sizes[-1], 10, npy_rng=npy_rng
+    None, 10, npy_rng=npy_rng
 )
 model_ft.print_layer()
-"""
-train_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), train_y)),
-    givens = {model_ft.varin : train_x},
-)
-test_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), test_y)),
-    givens = {model_ft.varin : test_x},
-)
-"""
+
 # compile error rate counters:
 index = T.lscalar()
 truth = T.lvector('truth')
@@ -335,55 +273,43 @@ def train_error():
 test_set_error_rate = theano.function(
     [index],
     T.mean(T.neq(model_ft.models_stack[-1].predict(), truth)),
-    givens = {model_ft.varin : test_x[index * batchsize: (index + 1) * batchsize],
-              truth : test_y[index * batchsize: (index + 1) * batchsize]},
+    givens = {model_ft.varin : test_x[index * batchsize: (index+1) * batchsize],
+              truth : test_y[index * batchsize: (index+1) * batchsize]},
 )
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(10000/batchsize)])
 print "Done."
-"""
-trainer = GraddescentMinibatch(
-    varin=model_ft.varin, data=train_x, 
-    truth=model_ft.models_stack[-1].vartruth, truth_data=train_y,
-    supervised=True,
-    cost=model_ft.models_stack[-1].cost() + \
-         model_ft.models_stack[-1].weightdecay(weightdecay),
-    params=model_ft.models_stack[-1].params, 
-    batchsize=batchsize, learningrate=logreg_lr, momentum=momentum,
-    rng=npy_rng
-)
 
-init_lr = trainer.learningrate
-prev_cost = numpy.inf
-for epoch in xrange(logreg_epc):
-    cost = trainer.epoch()
-    if cost >= prev_cost:
-        trainer.set_learningrate(0.9 * trainer.learningrate)
-        if trainer.learningrate < 1e-4 * init_lr:
-            break
-    prev_cost = cost
-print "Done."
-save_params(model, 'ZCARELUAE_50000_8000_1000_1600_10_local_wsz6_12_4_8_3_6.npy')
-print "***error rate: train: %f, test: %f" % (
-    train_error(), test_error()
-)
-"""
 #############
 # FINE-TUNE #
 #############
 
-print "\n\n... fine-tuning the whole network"
+normal_cost = model_ft.models_stack[-1].cost() + \
+              model_ft.models_stack[-1].weightdecay(weightdecay)
+# gradients = T.grad(normal_cost, model_ft.models_stack[0].w)
+# grad_cost = T.sum((gradients * (1 - mask_l0_theano))**2)
+
 trainer = GraddescentMinibatch(
     varin=model_ft.varin, data=train_x, 
     truth=model_ft.models_stack[-1].vartruth, truth_data=train_y,
     supervised=True,
-    cost=model_ft.models_stack[-1].cost() + \
-         model_ft.models_stack[-1].weightdecay(weightdecay),
+    cost=normal_cost,
     params=model_ft.params, 
     batchsize=batchsize, learningrate=finetune_lr, momentum=momentum,
     rng=npy_rng
 )
 
+# trainer2 = GraddescentMinibatch(
+#     varin=model_ft.varin, data=train_x, 
+#     truth=model_ft.models_stack[-1].vartruth, truth_data=train_y,
+#     supervised=True,
+#     cost=grad_cost,
+#     params=model_ft.params, 
+#     batchsize=batchsize, learningrate=finetune_lr * 1e-5, momentum=momentum,
+#     rng=npy_rng
+# )
+
+print "\n\n... fine-tuning the whole network"
 init_lr = trainer.learningrate
 prev_cost = numpy.inf
 epc_cost = 0.
@@ -393,10 +319,15 @@ crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
 for step in xrange(finetune_epc * 50000 / batchsize):
     # learn
+    # if (step - 1) % 500 == 0:
+    #     print "normal cost: ",
     cost = trainer.step_fast(verbose_stride=500)
+    # if (step - 1) % 500 == 0:
+    #     print "gradient cost: ",
+    # cost_grad = trainer2.step_fast(verbose_stride=500)
     apply_mask[0]()
     apply_mask[1]()
-    apply_mask[2]()
+    #apply_mask[2]()
 
     epc_cost += cost
     if step % (50000 / batchsize) == 0 and step > 0:
@@ -424,6 +355,6 @@ print "Done."
 print "***FINAL error rate, train: %f, test: %f" % (
     train_error(), test_error()
 )
-save_params(model, 'ZCARELUAE_local3d_ft.npy')
+save_params(model, __file__.split('.')[0] + '_params.npy')
 
 pdb.set_trace()
